@@ -1,6 +1,8 @@
 # Card Grading Simple
 
-Card scan, portfolio, and Deep Core vault. Identity stays in Postgres. Live prices use the xAI key.
+Card grading app for cards, comics, and gaming systems. Standard and Deep Core grading. PSA complement.
+
+Identity stays in Postgres. Live prices use the xAI key.
 
 ## Supabase
 
@@ -12,11 +14,11 @@ Card scan, portfolio, and Deep Core vault. Identity stays in Postgres. Live pric
 
 That applies `migrations/` (accounts, card catalog, grade chat). The preview still uses embedded Postgres when `DATABASE_URL` is empty. A Supabase URL turns TLS on by itself.
 
-## GitHub
+## Run
 
 ```
 npm install
 npm run dev
 ```
 
-The dev server is [http://127.0.0.1:8080](http://127.0.0.1:8080). Do not commit `.env`.
+Do not commit `.env`.
