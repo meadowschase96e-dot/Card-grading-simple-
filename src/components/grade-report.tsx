@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import type { GradeResponse, ListingChannel, PriceTier, SideReport, VaultItem } from "@/lib/grade-types";
 import { CHANNELS, deepQuote, fieldLabels, money, priceRows, sportLabel } from "@/lib/grade-types";
 import { cropToBlackMat, stampIndex } from "@/lib/image";
+import { openChannel } from "@/lib/listings";
 import { cgcDetail } from "@/lib/knowledge/cgc";
 import { speakCard } from "@/lib/voice";
 import { useSession } from "@/lib/session-store";
@@ -139,7 +140,9 @@ export function GradeReport({ image, result, vaultId, indexed = false, back, dee
     }
     submitListing(activeId, channel, useTier);
     const label = CHANNELS.find((c) => c.id === channel)?.label ?? channel;
-    toast.success(`Queued for ${label}`);
+    const query = [card.year, card.company, card.subject, card.set, card.number].filter(Boolean).join(" ");
+    openChannel(channel, query);
+    toast.success(`Opening ${label}`);
   }
 
   return (

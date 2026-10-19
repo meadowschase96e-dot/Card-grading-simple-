@@ -4,14 +4,8 @@ import { askGrade, type ChatCard } from "@/lib/ai/chat";
 import { listenCommand, speakInstalled, stopInstalled } from "@/lib/voice";
 import type { VaultItem } from "@/lib/grade-types";
 import { Button } from "@/components/ui/button";
-import { ADMOB_APP_ID, ADMOB_CHAT_UNIT, ADMOB_PUBLISHER_ID } from "@/lib/admob";
-
-const ADS = [
-  "Vault+ on Origin — inventory sync",
-  "Matte black sleeves for the portfolio",
-  "Queue a card to eBay, Mercari, Marketplace, or Posh",
-  "Scan. Price. File.",
-];
+import { AdMobBanner } from "@/components/admob-banner";
+import { recordPlacement } from "@/lib/revenue";
 
 type Turn =
   | { id: string; kind: "q" | "a"; text: string; source?: string }
@@ -33,52 +27,7 @@ function toBrief(items: VaultItem[]): ChatCard[] {
 }
 
 function ChatBoxAd() {
-  useEffect(() => {
-    const bridge = (window as Window & { median?: { admob?: { banner?: { enable?: () => void; disable?: () => void } } } }).median;
-    bridge?.admob?.banner?.enable?.();
-    const scriptId = "gms-adsbygoogle";
-    if (!document.getElementById(scriptId)) {
-      const script = document.createElement("script");
-      script.id = scriptId;
-      script.async = true;
-      script.crossOrigin = "anonymous";
-      script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADMOB_PUBLISHER_ID}`;
-      document.head.appendChild(script);
-    }
-    let tries = 0;
-    const timer = window.setInterval(() => {
-      tries += 1;
-      const ads = (window as Window & { adsbygoogle?: unknown[] }).adsbygoogle;
-      if (ads) {
-        try {
-          ads.push({});
-        } catch {
-          /* the slot is already filled */
-        }
-        window.clearInterval(timer);
-      } else if (tries > 20) {
-        window.clearInterval(timer);
-      }
-    }, 300);
-    return () => {
-      window.clearInterval(timer);
-      bridge?.admob?.banner?.disable?.();
-    };
-  }, []);
-
-  return (
-    <aside data-admob-app-id={ADMOB_APP_ID} data-admob-unit={ADMOB_CHAT_UNIT} className="overflow-hidden rounded-md border border-border bg-bg">
-      <ins
-        className="adsbygoogle block min-h-[50px] w-full"
-        style={{ display: "block" }}
-        data-ad-client={ADMOB_PUBLISHER_ID}
-        data-ad-slot="2132480876"
-        data-ad-format="horizontal"
-        data-full-width-responsive="true"
-        data-adtest="on"
-      />
-    </aside>
-  );
+  return <AdMobBanner placement="chat_box" />;
 }
 
 export function GradeChat({ items, onClose }: { items: VaultItem[]; onClose: () => void }) {
@@ -121,10 +70,17 @@ export function GradeChat({ items, onClose }: { items: VaultItem[]; onClose: () 
         },
       ];
       if (count % 4 === 0) {
-        next.push({ id: `ad-${count}`, kind: "ad", text: ADS[(count / 4 - 1) % ADS.length] ?? ADS[0] });
+        recordPlacement("chat_every_4");
+        next.push({ id: `ad-${count}`, kind: "ad", text: "" });
       }
       setTurns((prev) => [...prev, ...next]);
-      if (playback) speakInstalled([text, reply.answer]);
+      if (playback) {
+        try {
+          speakInstalled([text, reply.answer]);
+        } catch {
+          /* A voice error must not fail the answer. */
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Chat failed");
     } finally {
@@ -154,7 +110,7 @@ export function GradeChat({ items, onClose }: { items: VaultItem[]; onClose: () 
           className="flex h-11 items-center gap-2 rounded-md border border-border px-3 font-mono text-[0.62rem] uppercase tracking-[0.14em]"
         >
           {playback ? <Volume2 className="size-4 text-accent" /> : <VolumeX className="size-4" />}
-          {playback ? "Grit voice" : "Voice off"}
+          {playback ? "Male voice" : "Voice off"}
         </button>
       </div>
       <h2 className="font-display text-3xl uppercase tracking-[0.06em]">Grade chat</h2>
@@ -179,9 +135,8 @@ export function GradeChat({ items, onClose }: { items: VaultItem[]; onClose: () 
         ) : null}
         {turns.map((turn) =>
           turn.kind === "ad" ? (
-            <aside key={turn.id} className="rounded-md border border-border bg-elevated px-3 py-2">
-              <p className="font-mono text-[0.58rem] uppercase tracking-[0.16em] text-subtle">Sponsored</p>
-              <p className="text-sm text-fg">{turn.text}</p>
+            <aside key={turn.id} className="rounded-md border border-border bg-bg px-2 py-2">
+              <AdMobBanner placement="chat_every_4" />
             </aside>
           ) : (
             <div key={turn.id} className={turn.kind === "q" ? "ml-8 self-end" : "mr-8 self-start"}>

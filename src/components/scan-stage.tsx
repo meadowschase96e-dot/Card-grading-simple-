@@ -402,6 +402,9 @@ export function ScanStage() {
       {looking && !spotDone ? (
         <CommercialBreak
           seconds={scanLane === "deep" ? 60 : 15}
+          placement={
+            scanLane === "deep" ? (side === "back" ? "deep_back_60" : "deep_front_60") : "standard_scan_15"
+          }
           kicker={scanLane === "deep" ? `Deep Core · ${side} · 60s` : "Standard · 15s"}
           detail={
             scanLane === "deep"

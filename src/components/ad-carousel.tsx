@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { flipSpot, peekSpot, spotLabel, type AdSpot } from "@/lib/ad-spots";
+import { AdMobBanner } from "@/components/admob-banner";
+import { recordPlacement } from "@/lib/revenue";
 
 const GATE_SECONDS = 30;
 const CLIP_SECONDS = 15;
@@ -57,6 +59,7 @@ export function AdCarousel({
       }
       if (mode === "banner") {
         stopped = true;
+        recordPlacement("carousel_30");
         setActive(flipSpot());
         setLeft(GATE_SECONDS);
         return;
@@ -80,10 +83,10 @@ export function AdCarousel({
   if (!locked) {
     return (
       <section
-        className="flex h-24 items-center gap-3 border-y border-border bg-bg px-2"
+        className="flex h-[146px] items-center gap-3 border-y border-border bg-bg px-2"
         aria-label={`${spotLabel(active)} commercial`}
       >
-        <div className="relative h-16 w-28 shrink-0 overflow-hidden rounded-sm bg-bg">
+        <div className="relative h-[114px] w-28 shrink-0 overflow-hidden rounded-sm bg-bg">
           <video
             key={active}
             ref={videoRef}
@@ -98,6 +101,7 @@ export function AdCarousel({
           Ad · {spotLabel(active)}
         </p>
         <span className="ml-auto font-display text-lg tabular-nums leading-none">{left}</span>
+        <AdMobBanner placement="carousel_30" />
         <button
           type="button"
           onClick={() => {
@@ -123,6 +127,7 @@ export function AdCarousel({
         </p>
         <div className="flex items-center gap-2">
           <span className="font-display text-lg tabular-nums leading-none">{left}</span>
+          <AdMobBanner placement="carousel_30" />
           <button
             type="button"
             onClick={() => {

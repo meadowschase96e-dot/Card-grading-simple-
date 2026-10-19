@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import type { PlacementId } from "@/lib/admob";
+import { recordPlacement } from "@/lib/revenue";
 
 const SPOT_SECONDS = 15;
 
@@ -7,11 +9,13 @@ export function CommercialBreak({
   kicker = "Scan ad gate · 30s",
   detail = "Card scan stays locked until both 15s spots finish.",
   seconds = 30,
+  placement = "vault_gate_30",
 }: {
   onDone: () => void;
   kicker?: string;
   detail?: string;
   seconds?: number;
+  placement?: PlacementId;
 }) {
   const gate = Math.max(SPOT_SECONDS, seconds);
   const spots = Math.max(1, Math.round(gate / SPOT_SECONDS));
@@ -33,6 +37,7 @@ export function CommercialBreak({
       doneRef.current = true;
       closed = true;
       video.pause();
+      recordPlacement(placement);
       onDoneRef.current();
     };
     const play = () => {
@@ -74,7 +79,7 @@ export function CommercialBreak({
       video.removeEventListener("ended", onEnded);
       video.removeEventListener("timeupdate", onTime);
     };
-  }, [spots]);
+  }, [spots, placement]);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-bg" role="dialog" aria-label={`${gate} second ad gate`}>

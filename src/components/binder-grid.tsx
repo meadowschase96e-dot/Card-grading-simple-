@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, ScanLine } from "lucide-react";
+import { armDeskBack } from "@/lib/desk-back";
+import { channelHome } from "@/lib/listings";
 import { useVault } from "@/lib/vault-store";
 import {
   CHANNELS,
@@ -9,6 +11,7 @@ import {
   sportLabel,
   type ListingChannel,
   type PortfolioSport,
+  type VaultItem,
 } from "@/lib/grade-types";
 import { COMIC_LINES, GAME_LINES, PRINT_LINES, PRINT_YEAR, SYSTEM_LINES } from "@/lib/knowledge";
 import { cn } from "@/lib/utils";
@@ -35,6 +38,19 @@ export function Portfolio({
   const items = useVault((s) => s.items);
   const [section, setSection] = useState<Section | null>(null);
   const [deepOpen, setDeepOpen] = useState(false);
+
+  useEffect(() => {
+    if (section || deepOpen) armDeskBack();
+  }, [section, deepOpen]);
+
+  useEffect(() => {
+    const home = () => {
+      setSection(null);
+      setDeepOpen(false);
+    };
+    window.addEventListener("gms-home", home);
+    return () => window.removeEventListener("gms-home", home);
+  }, []);
   const deepItems = items.filter((item) => item.lane === "deep");
 
   const sports = PORTFOLIO_SPORTS.map((sport) => ({
@@ -105,6 +121,7 @@ export function Portfolio({
   if (!section) {
     return (
       <div className="space-y-6">
+        <BinderPage items={items} onOpenItem={onOpenItem} />
         <div>
           <p className="font-mono text-[0.62rem] uppercase tracking-[0.2em] text-accent">Sections</p>
           <h2 className="mt-1 font-display text-2xl uppercase tracking-[0.06em]">Portfolio</h2>
@@ -112,7 +129,7 @@ export function Portfolio({
         <button
           type="button"
           onClick={() => setDeepOpen(true)}
-          className="flex h-14 w-full items-center justify-between rounded-md border border-border bg-surface px-4 text-left"
+          className="gms-divider flex h-14 w-full items-center justify-between rounded-md border border-border px-4 pl-5 text-left"
         >
           <span className="font-display text-xl uppercase tracking-[0.06em]">Deep Core vault</span>
           <span className="font-mono text-sm text-subtle">{deepItems.length}</span>
@@ -134,7 +151,7 @@ export function Portfolio({
           <p className="mb-2 font-mono text-[0.62rem] uppercase tracking-[0.2em] text-subtle">Submissions</p>
           <div className="space-y-2">
             {channels.map((row) => (
-              <SectionRow key={row.id} label={row.label} count={row.count} onClick={() => setSection(row)} />
+              <SectionRow key={row.id} label={row.label} count={row.count} href={channelHome(row.id)} />
             ))}
           </div>
         </div>
@@ -233,18 +250,64 @@ export function Portfolio({
   );
 }
 
-function SectionRow({ label, count, onClick }: { label: string; count: number; onClick: () => void }) {
+function BinderPage({ items, onOpenItem }: { items: VaultItem[]; onOpenItem: (id: string) => void }) {
+  const pockets = Array.from({ length: 9 }, (_, index) => items[index] ?? null);
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex h-14 w-full items-center justify-between rounded-md border border-border bg-surface px-4 text-left"
-    >
+    <div className="gms-binder" aria-label="Vault binder">
+      <div className="gms-rings" aria-hidden>
+        <span />
+        <span />
+        <span />
+      </div>
+      <div className="gms-pockets">
+        {pockets.map((item, index) =>
+          item ? (
+            <button key={item.id} type="button" onClick={() => onOpenItem(item.id)} className="gms-sleeve">
+              <img src={item.image} alt={item.card.subject} />
+            </button>
+          ) : (
+            <div key={`empty-${index}`} className="gms-sleeve" aria-hidden>
+              <span className="gms-sleeve-empty" />
+            </div>
+          ),
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SectionRow({
+  label,
+  count,
+  onClick,
+  href,
+}: {
+  label: string;
+  count: number;
+  onClick?: () => void;
+  href?: string;
+}) {
+  const className =
+    "gms-divider flex h-14 w-full items-center justify-between rounded-md border border-border px-4 pl-5 text-left";
+  const body = (
+    <>
       <span className="font-display text-xl uppercase tracking-[0.06em]">{label}</span>
       <span className="flex items-center gap-2">
         <span className="font-mono text-sm tabular-nums text-accent">{count}</span>
         <ChevronRight className="size-4 text-subtle" />
       </span>
+    </>
+  );
+  if (href) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className={className}>
+        {body}
+      </a>
+    );
+  }
+  return (
+    <button type="button" onClick={onClick} className={className}>
+      {body}
     </button>
   );
 }

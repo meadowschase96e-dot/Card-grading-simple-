@@ -13,8 +13,10 @@ import { UserButton } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { useSession } from "@/lib/session-store";
 import { bindVaultUser, useVault, VAULT_AD_KEY } from "@/lib/vault-store";
+import { armDeskBack, watchDeskBack } from "@/lib/desk-back";
 import { cropToBlackMat } from "@/lib/image";
 import { speakVaultGreeting } from "@/lib/voice";
+import { supabaseStatus } from "@/lib/supabase/server";
 
 export const Route = createFileRoute("/")({ component: Home });
 
@@ -36,6 +38,7 @@ function Home() {
       <CommercialBreak
         kicker="Vault commercial · 30s"
         detail="The vault stays locked until both 15s spots finish."
+        placement="vault_gate_30"
         onDone={() => {
           sessionStorage.setItem(VAULT_AD_KEY, user.id);
           setGate("clear");
@@ -69,7 +72,24 @@ function VaultDesk() {
   const setAdsReady = useSession((s) => s.setAdsReady);
   const [openVaultId, setOpenVaultId] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const [dbNote, setDbNote] = useState<string | null>(null);
   const vaultItem = items.find((i) => i.id === openVaultId) ?? null;
+  const away = view !== "home" || Boolean(openVaultId) || chatOpen;
+
+  useEffect(() => {
+    if (away) armDeskBack();
+  }, [away]);
+
+  useEffect(
+    () =>
+      watchDeskBack(() => {
+        useSession.getState().resetDraft();
+        setOpenVaultId(null);
+        setChatOpen(false);
+        window.dispatchEvent(new Event("gms-home"));
+      }),
+    [],
+  );
 
   useEffect(() => {
     let cancel = false;
@@ -102,6 +122,12 @@ function VaultDesk() {
   }, [view, openVaultId, setAdsReady]);
 
   useEffect(() => {
+    void supabaseStatus().then((status) => {
+      setDbNote(status.ok ? "" : status.error);
+    });
+  }, []);
+
+  useEffect(() => {
     if (sessionStorage.getItem("gms-greet") === "1") return;
     const mark = () => sessionStorage.setItem("gms-greet", "1");
     speakVaultGreeting(mark);
@@ -115,7 +141,7 @@ function VaultDesk() {
 
   return (
     <main
-      className={`gms-grid-bg min-h-dvh ${adsReady ? "pb-14" : ""}`}
+      className={`gms-grid-bg min-h-dvh ${adsReady ? "pb-[100px]" : ""}`}
     >
       <div className="mx-auto max-w-5xl px-4 pb-10 sm:px-6">
         <div className={`sticky top-0 z-20 -mx-4 bg-bg px-4 sm:-mx-6 sm:px-6 ${adsReady ? "pt-[max(0.5rem,env(safe-area-inset-top))]" : "pt-4"}`}>
@@ -141,6 +167,7 @@ function VaultDesk() {
           {adsReady ? <AdCarousel mode="banner" /> : null}
         </div>
 
+        {dbNote ? <p className="mt-3 text-sm text-danger">{dbNote}</p> : null}
         {ping && !ping.ok ? (
           <p className="mt-3 text-sm text-danger">
             {ping.error ?? "Don Nico AI is offline."} Open the LIVE badge to verify the key.

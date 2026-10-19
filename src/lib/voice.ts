@@ -1,70 +1,102 @@
-const MALE = /male|david|daniel|alex|fred|james|guy|rishi|george|arthur|aaron|bruce|ralph|gordon|reed|christopher|andrew|brian|eric|albert|tom\b/i;
-const FEMALE = /female|samantha|victoria|karen|moira|zira|susan|fiona|kate|serena|allison|ava|salli|nicky/i;
-/** Rougher installed male voices. First match wins. */
-const GRIT = [/fred/i, /ralph/i, /bruce/i, /albert/i, /daniel/i, /arthur/i, /gordon/i, /david/i];
+const FEMALE =
+  /female|samantha|victoria|karen|moira|zira|susan|fiona|kate|serena|allison|ava|salli|nicky|sara|joanna|kendra|ivy|emma|amy|olivia|sophie|tessa|veena|google us english|english united states|english \(united states\)|en-us-x-sfg|en-us-x-iob|en-gb-x-gba|en-gb-x-gbb/i;
+const NOVELTY =
+  /fred|ralph|albert|bahh|bells|boing|bubbles|wobble|zarvox|trinoids|whisper|superstar|organ|cellos|junior|good news|pipe organ/i;
+const NATURAL: Array<[RegExp, number]> = [
+  [/guy|david|mark|christopher|andrew/i, 60],
+  [/brian|eric|tony|james|george/i, 44],
+  [/en-us-x-iom|en-us-x-tpd|en-us-x-iog|en-gb-x-rjs|en-gb-x-gbd|standard-[bdij]|wavenet-[abdij]|neural2-[dij]/i, 50],
+  [/alex|aaron|nathan|evan|ryan/i, 24],
+  [/daniel|google uk english male|arthur|gordon|rishi|tom\b/i, 16],
+  [/\bmale\b/i, 12],
+];
 
 function english(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice[] {
-  const en = voices.filter((voice) => /en/i.test(voice.lang));
-  return en.length ? en : voices;
+  return voices.filter((voice) => /en/i.test(voice.lang));
 }
 
-function maleOnly(list: SpeechSynthesisVoice[]): SpeechSynthesisVoice[] {
-  return list.filter((voice) => MALE.test(voice.name) && !FEMALE.test(voice.name));
+function maleScore(voice: SpeechSynthesisVoice): number {
+  const label = `${voice.name} ${voice.voiceURI}`;
+  if (FEMALE.test(label) || NOVELTY.test(label)) return -1;
+  let score = 0;
+  for (const [pattern, points] of NATURAL) {
+    if (pattern.test(label)) score = Math.max(score, points);
+  }
+  if (score === 0) return 0;
+  if (/enhanced|premium|neural|online/i.test(label)) score += 8;
+  if (/en-US|en_US/i.test(voice.lang)) score += 4;
+  return score;
 }
 
-/** Device-installed male voice. No network and no API key. */
+/** The male voice only. The female voice is not used. */
 export function installedMaleVoice(): SpeechSynthesisVoice | null {
   if (typeof window === "undefined" || !window.speechSynthesis) return null;
-  const voices = english(window.speechSynthesis.getVoices());
-  const local = voices.filter((voice) => voice.localService);
-  const pool = maleOnly(local).length ? maleOnly(local) : maleOnly(voices);
-  for (const pattern of GRIT) {
-    const hit = pool.find((voice) => pattern.test(voice.name));
-    if (hit) return hit;
-  }
-  return pool[0] ?? local.find((voice) => !FEMALE.test(voice.name)) ?? null;
+  const ranked = english(window.speechSynthesis.getVoices())
+    .map((voice) => ({ voice, score: maleScore(voice) }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score);
+  return ranked[0]?.voice ?? null;
 }
 
-function utterance(text: string, tune?: { rate: number; pitch: number }): SpeechSynthesisUtterance {
+function utterance(text: string): SpeechSynthesisUtterance | null {
   const voice = installedMaleVoice();
+  if (!voice || FEMALE.test(`${voice.name} ${voice.voiceURI}`)) return null;
   const line = new SpeechSynthesisUtterance(text);
-  if (voice) {
-    line.voice = voice;
-    line.lang = voice.lang;
-  } else {
-    line.lang = "en-US";
-  }
-  const gravel = voice && /fred|ralph|bruce|albert/i.test(voice.name);
-  line.rate = tune?.rate ?? (gravel ? 0.9 : 0.86);
-  line.pitch = tune?.pitch ?? (gravel ? 0.82 : 0.62);
+  line.voice = voice;
+  line.lang = voice.lang;
+  line.rate = 0.95;
+  line.pitch = 0.92;
   line.volume = 1;
   return line;
 }
 
-/** Queue spoken lines on the installed voice. */
-export function speakInstalled(parts: string[], tune?: { rate: number; pitch: number; onStart?: () => void }) {
+function sentences(parts: string[]): string[] {
+  return parts
+    .flatMap((part) => part.split(/(?<=[.!?])\s+/))
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+let spokenTurn = 0;
+let clip: HTMLAudioElement | null = null;
+
+/** Queue every line on the male voice. */
+export function speakInstalled(parts: string[], tune?: { rate?: number; pitch?: number; onStart?: () => void }) {
   if (typeof window === "undefined" || !window.speechSynthesis) return;
   const synth = window.speechSynthesis;
+  const lines = sentences(parts);
+  if (!lines.length) return;
+  const mine = ++spokenTurn;
   const run = () => {
-    synth.cancel();
-    let started = false;
-    for (const text of parts) {
-      const line = text.trim();
-      if (!line) continue;
-      const spoken = utterance(line, tune);
-      if (!started && tune?.onStart) {
-        started = true;
-        spoken.onstart = () => tune.onStart?.();
-      }
-      synth.speak(spoken);
+    if (mine !== spokenTurn) return;
+    if (clip) {
+      clip.pause();
+      clip = null;
     }
+    const queue = () => {
+      if (mine !== spokenTurn) return;
+      lines.forEach((text, index) => {
+        const spoken = utterance(text);
+        if (!spoken) return;
+        if (tune?.rate) spoken.rate = tune.rate;
+        if (tune?.pitch) spoken.pitch = tune.pitch;
+        if (index === 0 && tune?.onStart) spoken.onstart = () => tune.onStart?.();
+        synth.speak(spoken);
+      });
+    };
+    if (synth.speaking || synth.pending) {
+      synth.cancel();
+      window.setTimeout(queue, 50);
+      return;
+    }
+    queue();
   };
-  if (synth.getVoices().length === 0) {
-    synth.addEventListener("voiceschanged", () => run(), { once: true });
-    synth.getVoices();
+  synth.getVoices();
+  if (synth.getVoices().length > 0) {
+    run();
     return;
   }
-  run();
+  synth.addEventListener("voiceschanged", () => run(), { once: true });
 }
 
 const GREETING = [
@@ -76,12 +108,22 @@ const GREETING = [
   "Our marketplace showcases every newly listed C G S card, and listed cards from all major marketplaces.",
 ];
 
-/** Older grit. One welcome when the vault opens. No API key. */
+/** Male voice when the main page opens. Recording first. Phone male voice if that cannot play. Never a female voice. */
 export function speakVaultGreeting(onStart?: () => void) {
-  speakInstalled(GREETING, { rate: 0.78, pitch: 0.54, onStart });
+  if (typeof window === "undefined") return;
+  stopInstalled();
+  const audio = new Audio("/voice/greeting.mp3");
+  clip = audio;
+  audio.onplay = () => onStart?.();
+  void audio.play().catch(() => undefined);
 }
 
 export function stopInstalled() {
+  spokenTurn += 1;
+  if (clip) {
+    clip.pause();
+    clip = null;
+  }
   window.speechSynthesis?.cancel();
 }
 
