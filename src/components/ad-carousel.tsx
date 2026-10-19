@@ -94,6 +94,7 @@ export function AdCarousel({
             src="/commercials/pre-roll.mp4"
             playsInline
             muted
+            autoPlay
             preload="auto"
           />
         </div>

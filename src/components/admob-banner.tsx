@@ -1,11 +1,13 @@
 import { useEffect, useRef } from "react";
-import { ADMOB_APP_ID, ADMOB_BANNER_SLOT, ADMOB_BANNER_UNIT, ADMOB_PUBLISHER_ID, type PlacementId } from "@/lib/admob";
+import { ADMOB_APP_ID, ADMOB_BANNER_SLOT, ADMOB_BANNER_UNIT, ADMOB_PUBLISHER_ID, enableNativeBanner, type PlacementId } from "@/lib/admob";
 
 let scriptStarted = false;
 
 function ensureAdsScript() {
   if (scriptStarted || typeof document === "undefined") return;
   scriptStarted = true;
+  const host = window as Window & { adsbygoogle?: unknown[] };
+  host.adsbygoogle = host.adsbygoogle || [];
   if (document.getElementById("gms-adsbygoogle")) return;
   const script = document.createElement("script");
   script.id = "gms-adsbygoogle";
@@ -15,21 +17,19 @@ function ensureAdsScript() {
   document.head.appendChild(script);
 }
 
-/** One live banner request. The ad fills itself. This does not invent a creative. */
+/** Live AdMob banner request for this placement. Google fills it. Nothing is drawn in its place. */
 export function AdMobBanner({ placement, compact = false }: { placement: PlacementId; compact?: boolean }) {
   const pushed = useRef(false);
+  const slot = useRef<HTMLModElement>(null);
 
   useEffect(() => {
-    const bridge = (
-      window as Window & { median?: { admob?: { banner?: { enable?: () => void; disable?: () => void } } } }
-    ).median;
-    bridge?.admob?.banner?.enable?.();
+    enableNativeBanner();
     ensureAdsScript();
     let tries = 0;
     const timer = window.setInterval(() => {
       tries += 1;
       const ads = (window as Window & { adsbygoogle?: unknown[] }).adsbygoogle;
-      if (ads && !pushed.current) {
+      if (ads && slot.current && !pushed.current) {
         pushed.current = true;
         try {
           ads.push({});
@@ -37,14 +37,11 @@ export function AdMobBanner({ placement, compact = false }: { placement: Placeme
           /* This slot was already requested. */
         }
         window.clearInterval(timer);
-      } else if (tries > 20) {
+      } else if (tries > 40) {
         window.clearInterval(timer);
       }
-    }, 300);
-    return () => {
-      window.clearInterval(timer);
-      bridge?.admob?.banner?.disable?.();
-    };
+    }, 250);
+    return () => window.clearInterval(timer);
   }, []);
 
   return (
@@ -52,11 +49,12 @@ export function AdMobBanner({ placement, compact = false }: { placement: Placeme
       data-admob-app-id={ADMOB_APP_ID}
       data-admob-unit={ADMOB_BANNER_UNIT}
       data-admob-placement={placement}
-      className={compact ? "h-6 min-w-0 flex-1 overflow-hidden" : "min-w-0 flex-1 overflow-hidden"}
+      className={compact ? "h-full min-h-0 min-w-0 flex-1 overflow-hidden" : "min-h-[50px] min-w-0 flex-1 overflow-hidden"}
     >
       <ins
-        className={compact ? "adsbygoogle block h-6 w-full overflow-hidden" : "adsbygoogle block min-h-[50px] w-full"}
-        style={compact ? { display: "block", height: 24, maxHeight: 24 } : { display: "block" }}
+        ref={slot}
+        className="adsbygoogle block h-full w-full"
+        style={compact ? { display: "block", height: "100%", maxHeight: 100 } : { display: "block", minHeight: 50 }}
         data-ad-client={ADMOB_PUBLISHER_ID}
         data-ad-slot={ADMOB_BANNER_SLOT}
         data-ad-format="horizontal"

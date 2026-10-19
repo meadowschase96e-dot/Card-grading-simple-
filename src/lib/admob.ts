@@ -54,3 +54,25 @@ export function placementById(id: PlacementId): Placement {
   if (!found) throw new Error(`Unknown placement ${id}`);
   return found;
 }
+
+type MedianAdMob = {
+  banner?: { enable?: () => void; disable?: () => void };
+  showInterstitialIfReady?: () => void;
+  request?: { tracking?: (options: { callback?: () => void }) => void };
+};
+
+function medianAdMob(): MedianAdMob | null {
+  if (typeof window === "undefined") return null;
+  const bridge = (window as Window & { median?: { admob?: MedianAdMob } }).median;
+  return bridge?.admob ?? null;
+}
+
+/** Native banner inside the Android app. The unit is the one configured for this package. */
+export function enableNativeBanner() {
+  medianAdMob()?.banner?.enable?.();
+}
+
+/** Native full-screen ad when the Android app has one ready. The web commercial still plays. */
+export function showNativeInterstitial() {
+  medianAdMob()?.showInterstitialIfReady?.();
+}

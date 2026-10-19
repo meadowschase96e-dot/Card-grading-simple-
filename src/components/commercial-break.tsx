@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { PlacementId } from "@/lib/admob";
+import { showNativeInterstitial, type PlacementId } from "@/lib/admob";
 import { recordPlacement } from "@/lib/revenue";
 
 const SPOT_SECONDS = 15;
@@ -27,6 +27,12 @@ export function CommercialBreak({
   const [spot, setSpot] = useState(1);
   const [muted, setMuted] = useState(true);
 
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    showNativeInterstitial();
+  }, []);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -49,15 +55,12 @@ export function CommercialBreak({
         } catch {
           /* metadata not ready yet */
         }
-        void video.play().catch(() => undefined);
+        void video.play().then(() => setFailed(false)).catch(() => setFailed(true));
       };
       if (video.readyState >= 1) start();
       else video.addEventListener("loadedmetadata", start, { once: true });
     };
     const onTime = () => {
-      const len = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : SPOT_SECONDS;
-      const remain = len - video.currentTime + Math.max(0, spots - played - 1) * len;
-      setLeft(Math.max(0, Math.ceil(remain)));
       setSpot(Math.min(spots, played + 1));
     };
     const onEnded = () => {
@@ -71,11 +74,29 @@ export function CommercialBreak({
     };
     video.addEventListener("ended", onEnded);
     video.addEventListener("timeupdate", onTime);
+    video.addEventListener("error", () => setFailed(true));
     play();
+    const kick = () => {
+      if (!video.paused) return;
+      void video.play().then(() => setFailed(false)).catch(() => setFailed(true));
+    };
+    window.addEventListener("pointerdown", kick);
+    const clock = window.setInterval(() => {
+      setLeft((value) => {
+        if (value <= 1) {
+          window.clearInterval(clock);
+          finish();
+          return 0;
+        }
+        return value - 1;
+      });
+    }, 1000);
     const safety = window.setTimeout(finish, (spots * 16 + 3) * 1000);
     return () => {
       closed = true;
+      window.clearInterval(clock);
       window.clearTimeout(safety);
+      window.removeEventListener("pointerdown", kick);
       video.removeEventListener("ended", onEnded);
       video.removeEventListener("timeupdate", onTime);
     };
@@ -99,8 +120,18 @@ export function CommercialBreak({
           src="/commercials/pre-roll.mp4"
           playsInline
           muted
+          autoPlay
           preload="auto"
         />
+        {failed ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#080808] px-6 text-center">
+            <p className="font-mono text-[0.7rem] uppercase tracking-[0.22em] text-accent">Test commercial</p>
+            <p className="font-display text-4xl uppercase leading-none">Card Grading Simple</p>
+            <p className="max-w-xs text-sm text-muted">
+              Spot {spot} of {spots}. Tap Sound if the picture has not started.
+            </p>
+          </div>
+        ) : null}
         <div className="gms-scanlines pointer-events-none absolute inset-0 opacity-30" />
       </div>
       <div className="flex items-center justify-between gap-3 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
